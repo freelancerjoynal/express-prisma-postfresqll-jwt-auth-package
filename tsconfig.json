@@ -1,0 +1,38 @@
+{
+  "compilerOptions": {
+    /* File Layout */
+    "rootDir": "./src",
+    "outDir": "./dist",
+
+    /* Environment Settings */
+    "module": "NodeNext", // ESM এর জন্য সবচেয়ে সঠিক সেটিংস
+    "moduleResolution": "NodeNext", // ফাইল ইম্পোর্টে .js এক্সটেনশন বাধ্যতামুলক করবে
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "types": ["node"],
+
+    /* Interop & Compatibility */
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "verbatimModuleSyntax": false, // এটি false করলে ইম্পোর্ট এরর কমে যাবে
+
+    /* Output Options */
+    "sourceMap": true,
+    "declaration": true,
+    "declarationMap": true,
+    "skipLibCheck": true,
+
+    /* Strict Type Checking */
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+
+    /* Style & Safety Options */
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "isolatedModules": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}
