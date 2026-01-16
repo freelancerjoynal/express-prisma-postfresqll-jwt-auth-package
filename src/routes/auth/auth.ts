@@ -6,7 +6,8 @@ import {
   refresh, 
   logout, 
   forgotPassword, 
-  resetPassword 
+  resetPassword,
+  verifyLoginOTP 
 } from '../../controllers/authController.js';
 
 const authRouter = express.Router();
@@ -14,6 +15,7 @@ const authRouter = express.Router();
 authRouter.post('/signup', signup);
 authRouter.post('/verify', verifyOTP); // This now verifies and logs in instantly
 authRouter.post('/login', login);
+authRouter.post('/verify-login-otp', verifyLoginOTP)
 authRouter.post('/refresh', refresh);
 authRouter.post('/logout', logout);
 

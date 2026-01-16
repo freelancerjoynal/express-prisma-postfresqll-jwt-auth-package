@@ -6,8 +6,8 @@ import crypto from 'crypto';
 import { sendOTPEmail, sendNewPasswordEmail } from '../utils/mailer.js';
 import { prisma } from '../lib/prisma.js';
 
-// ১. টোকেন জেনারেশন ফাংশন (অবশ্যই role ইনক্লুড করতে হবে)
-const generateTokens = (userId: number, role: string) => {
+// ১. টোকেন জেনারেশন ফাংশন
+const generateTokens = (userId: string | number, role: string) => {
   const accessToken = jwt.sign(
     { userId, role }, 
     process.env.JWT_ACCESS_SECRET!, 
@@ -26,7 +26,6 @@ export const signup = async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
 
-    // পাসওয়ার্ড না থাকলে bcrypt এরর দেয়, তাই আগে চেক করা জরুরি
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
     }
@@ -36,7 +35,6 @@ export const signup = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'User already exists' });
     }
 
-    // পাসওয়ার্ড স্ট্রিং কি না তা নিশ্চিত করে হ্যাশ করা
     const hashedPassword = await bcrypt.hash(String(password), 10);
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
@@ -46,7 +44,8 @@ export const signup = async (req: Request, res: Response) => {
         email, 
         password: hashedPassword, 
         otp, 
-        otpExpiry
+        otpExpiry,
+        role: 'USER'
       }
     });
 
@@ -58,7 +57,7 @@ export const signup = async (req: Request, res: Response) => {
   }
 };
 
-// ৩. ওটিপি ভেরিফিকেশন (এখানেও role পাঠানো হয়েছে)
+// ৩. রেজিস্ট্রেশন ওটিপি ভেরিফিকেশন
 export const verifyOTP = async (req: Request, res: Response) => {
   const { email, otp } = req.body;
   try {
@@ -89,7 +88,7 @@ export const verifyOTP = async (req: Request, res: Response) => {
   }
 };
 
-// ৪. স্ট্যান্ডার্ড লগইন (রোল সহ টোকেন তৈরি)
+// ৪. লগইন (ধাপ ১: ওটিপি পাঠানো)
 export const login = async (req: Request, res: Response) => {
   const { email, password } = req.body;
   try {
@@ -107,20 +106,49 @@ export const login = async (req: Request, res: Response) => {
       return res.status(403).json({ error: 'Please verify your email first' });
     }
 
-    const { accessToken, refreshToken } = generateTokens(user.id, user.role);
-    
-    await prisma.user.update({ where: { id: user.id }, data: { refreshToken } });
+    // লগইন ওটিপি জেনারেশন
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
 
-    res.cookie('accessToken', accessToken, { httpOnly: true, maxAge: 15 * 60 * 1000 });
-    res.cookie('refreshToken', refreshToken, { httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000 });
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { otp, otpExpiry }
+    });
 
-    res.json({ message: 'Login successful', role: user.role });
+    await sendOTPEmail(email, otp);
+    res.json({ message: 'Login OTP sent to your email.' });
   } catch (error) {
     res.status(500).json({ error: 'Internal server error' });
   }
 };
 
-// ৫. ফরগেট পাসওয়ার্ড
+// ৫. লগইন ওটিপি ভেরিফিকেশন (ধাপ ২: টোকেন ইস্যু)
+export const verifyLoginOTP = async (req: Request, res: Response) => {
+  const { email, otp } = req.body;
+  try {
+    const user = await prisma.user.findUnique({ where: { email } });
+
+    if (!user || user.otp !== otp || !user.otpExpiry || new Date() > user.otpExpiry) {
+      return res.status(400).json({ error: 'Invalid or expired OTP' });
+    }
+
+    const { accessToken, refreshToken } = generateTokens(user.id, user.role);
+    
+    await prisma.user.update({ 
+      where: { id: user.id }, 
+      data: { otp: null, otpExpiry: null, refreshToken } 
+    });
+
+    res.cookie('accessToken', accessToken, { httpOnly: true, maxAge: 15 * 60 * 1000 });
+    res.cookie('refreshToken', refreshToken, { httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000 });
+
+    res.json({ message: 'Login successful', role: user.role, accessToken });
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// ৬. ফরগেট পাসওয়ার্ড
 export const forgotPassword = async (req: Request, res: Response) => { 
   const { email } = req.body;
   try {
@@ -142,7 +170,7 @@ export const forgotPassword = async (req: Request, res: Response) => {
   }
 };
 
-// ৬. রিসেট পাসওয়ার্ড
+// ৭. রিসেট পাসওয়ার্ড
 export const resetPassword = async (req: Request, res: Response) => {
   const { email, otp } = req.body;
   try {
@@ -171,7 +199,7 @@ export const resetPassword = async (req: Request, res: Response) => {
   }
 };
 
-// ৭. রিফ্রেশ টোকেন (রোল বহন করা হয়েছে)
+// ৮. রিফ্রেশ টোকেন
 export const refresh = async (req: Request, res: Response) => {
   const refreshToken = req.cookies.refreshToken;
   if (!refreshToken) return res.status(401).json({ error: 'No refresh token' });
@@ -180,22 +208,23 @@ export const refresh = async (req: Request, res: Response) => {
     const user = await prisma.user.findFirst({ where: { refreshToken } });
     if (!user) return res.status(403).json({ error: 'Invalid refresh token' });
 
-    const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET!) as any;
+    const { accessToken, refreshToken: newRefreshToken } = generateTokens(user.id, user.role);
     
-    const newAccessToken = jwt.sign(
-      { userId: decoded.userId, role: decoded.role }, 
-      process.env.JWT_ACCESS_SECRET!, 
-      { expiresIn: '15m' }
-    );
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { refreshToken: newRefreshToken }
+    });
 
-    res.cookie('accessToken', newAccessToken, { httpOnly: true, maxAge: 15 * 60 * 1000 });
-    res.json({ message: 'Token refreshed' });
+    res.cookie('accessToken', accessToken, { httpOnly: true, maxAge: 15 * 60 * 1000 });
+    res.cookie('refreshToken', newRefreshToken, { httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000 });
+
+    res.json({ message: 'Token refreshed', role: user.role });
   } catch (err) {
     res.status(403).json({ error: 'Session expired' });
   }
 };
 
-// ৮. লগআউট
+// ৯. লগআউট
 export const logout = async (req: Request, res: Response) => {
   const refreshToken = req.cookies.refreshToken;
   if (refreshToken) {
