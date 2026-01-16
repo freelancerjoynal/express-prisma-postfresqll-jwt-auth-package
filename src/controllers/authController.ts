@@ -142,7 +142,7 @@ export const verifyLoginOTP = async (req: Request, res: Response) => {
     res.cookie('accessToken', accessToken, { httpOnly: true, maxAge: 15 * 60 * 1000 });
     res.cookie('refreshToken', refreshToken, { httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000 });
 
-    res.json({ message: 'Login successful', role: user.role, accessToken });
+    res.json({ message: 'Login successful', role: user.role, email: user.email, name: user.name, accessToken });
   } catch (error) {
     res.status(500).json({ error: 'Internal server error' });
   }
