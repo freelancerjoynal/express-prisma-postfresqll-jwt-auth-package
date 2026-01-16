@@ -16,8 +16,12 @@ app.use('/api/auth', authRouter);
 
 
 // --- Protected Routes ---
-import profileRouter from './routes/profile/profile.js';
+import profileRouter from './routes/profile/profileRouter.js';
 app.use('/api/profile', profileRouter);
+
+// Admin Dashboard Routes
+import adminDashboardRouter from './routes/dashboard/admin/adminDashboardRouter.js';
+app.use('/api/admin/dashboard', adminDashboardRouter);
 
 
 // Server Configuration
