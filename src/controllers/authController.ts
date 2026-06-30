@@ -14,21 +14,63 @@ const generateTokens = (userId: number) => {
 };
 
 // 1. User Registration
+// export const signup = async (req: Request, res: Response) => {
+//   const { email, password } = req.body;
+//   try {
+//     const hashedPassword = await bcrypt.hash(password, 10);
+//     const otp = Math.floor(100000 + Math.random() * 900000).toString();
+//     const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // Expires in 10 mins
+
+//     await prisma.user.create({
+//       data: { email, password: hashedPassword, otp, otpExpiry }
+//     });
+
+//     await sendOTPEmail(email, otp);
+//     res.status(201).json({ message: 'Signup success! Verification OTP sent to your email.' });
+//   } catch (error) {
+//     res.status(400).json({ error: 'User already exists' });
+//   }
+// };
 export const signup = async (req: Request, res: Response) => {
   const { email, password } = req.body;
+  
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // Expires in 10 mins
+    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); 
 
-    await prisma.user.create({
-      data: { email, password: hashedPassword, otp, otpExpiry }
+    // 1. Check if user already exists
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+    if (existingUser) {
+      return res.status(400).json({ error: 'User already exists' });
+    }
+
+    // 2. Prisma Transaction
+    await prisma.$transaction(async (tx) => {
+      await tx.user.create({
+        data: { email, password: hashedPassword, otp, otpExpiry }
+      });
+
+      try {
+        await sendOTPEmail(email, otp);
+      } catch (emailError) {
+        // আসল মেইল এররটি কনসোলে প্রিন্ট করবে যেন আপনি ডিবাগ করতে পারেন
+        console.error("User creation aborted. Mail server error details:", emailError);
+        throw new Error("OTP_SEND_FAILED");
+      }
     });
 
-    await sendOTPEmail(email, otp);
-    res.status(201).json({ message: 'Signup success! Verification OTP sent to your email.' });
-  } catch (error) {
-    res.status(400).json({ error: 'User already exists' });
+    return res.status(201).json({ message: 'Signup successful! Verification OTP has been sent to your email.' });
+
+  } catch (error: any) {
+    // এখানে এররটি চেক করা হচ্ছে
+    if (error.message === "OTP_SEND_FAILED") {
+      return res.status(500).json({ error: 'Failed to send verification email. Account creation rolled back.' });
+    }
+
+    // যদি ওটিপি ছাড়া অন্য কোনো এরর হয় (যেমন: ডাটাবেজ কানেকশন বা ইউনিক কনস্ট্রেইন্ট)
+    console.error("Actual Signup Error:", error); 
+    return res.status(500).json({ error: error.message || 'An unexpected error occurred during signup.' });
   }
 };
 

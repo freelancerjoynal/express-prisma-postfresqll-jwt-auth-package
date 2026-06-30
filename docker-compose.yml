@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  postgres_db:
+    image: postgres:16-alpine
+    container_name: express_postgres_container
+    environment:
+      POSTGRES_USER: usertesterfullstack   # আপনার নতুন ইউজারনেম
+      POSTGRES_PASSWORD: super_secure_password
+      POSTGRES_DB: testerfullstack         # আপনার নতুন ডাটাবেজ নাম
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_express_data:/var/lib/postgresql/data
+
+volumes:
+  pg_express_data:
